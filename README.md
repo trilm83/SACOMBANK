@@ -36,4 +36,4 @@ Mô hình TO-BE hứa hẹn rút ngắn đáng kể thời gian chờ đợi, lo
 
 ---
 **Tác giả:** Lê Minh Trí 
-*Khối Công nghệ thông tin - Vận hành Kỹ thuật, Sacombank*
+*Khối Công nghệ thông tin - TT.KTHT - Quản Trị Hệ Thống, SACOMBANK*
