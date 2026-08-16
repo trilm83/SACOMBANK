@@ -1,0 +1,611 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:modeler="http://camunda.org/schema/modeler/1.0" id="Definitions_1uc0v49" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Web Modeler" exporterVersion="0a9b4c5" modeler:executionPlatform="Camunda Cloud" modeler:executionPlatformVersion="8.9.0">
+  <bpmn:collaboration id="Collaboration_1subsg8">
+    <bpmn:participant id="Participant_0ute32x" name="Bộ phận / Phòng ban" processRef="Process_0ddhdbv" />
+    <bpmn:participant id="Participant_1rxlp3e" name="Asset Administrator" processRef="Process_0d65nqw" />
+    <bpmn:messageFlow id="Flow_0p24ay3" sourceRef="Activity_1k5gj8g" targetRef="Event_1fc3e7u" />
+    <bpmn:messageFlow id="Flow_msg_update_req" name="Yêu cầu bổ sung" sourceRef="Activity_0imvodb" targetRef="Activity_update_req" />
+    <bpmn:messageFlow id="Flow_msg_update_back" name="Gửi lại request" sourceRef="Activity_resend" targetRef="Event_msg_updated" />
+    <bpmn:messageFlow id="Flow_msg_result" name="Thông báo kết quả" sourceRef="Activity_0k4pr7t" targetRef="Event_receive_result" />
+  </bpmn:collaboration>
+
+  <!-- ============================================================ -->
+  <!-- POOL 1 — Bộ phận / Phòng ban (FIX #6: thêm luồng nhận phản hồi) -->
+  <!-- ============================================================ -->
+  <bpmn:process id="Process_0ddhdbv" isExecutable="false">
+    <bpmn:startEvent id="StartEvent_1i9m583" name="Bắt đầu">
+      <bpmn:outgoing>Flow_0akouhh</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:task id="Activity_1kx4mtd" name="Tổng hợp nhu cầu theo tuần / quý">
+      <bpmn:incoming>Flow_0akouhh</bpmn:incoming>
+      <bpmn:outgoing>Flow_1ptvlpd</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:sendTask id="Activity_1k5gj8g" name="Truy cập SmartIT và tạo request">
+      <bpmn:incoming>Flow_1ptvlpd</bpmn:incoming>
+      <bpmn:outgoing>Flow_to_wait</bpmn:outgoing>
+    </bpmn:sendTask>
+
+    <!-- FIX #6 & #3: Phòng/Ban chờ phản hồi, có thể được yêu cầu cập nhật -->
+    <bpmn:eventBasedGateway id="Gateway_wait_response" name="Chờ phản hồi">
+      <bpmn:incoming>Flow_to_wait</bpmn:incoming>
+      <bpmn:incoming>Flow_resend_to_wait</bpmn:incoming>
+      <bpmn:outgoing>Flow_to_catch_update</bpmn:outgoing>
+      <bpmn:outgoing>Flow_to_catch_result</bpmn:outgoing>
+    </bpmn:eventBasedGateway>
+
+    <bpmn:intermediateCatchEvent id="Event_catch_update_req" name="Nhận yêu cầu bổ sung">
+      <bpmn:incoming>Flow_to_catch_update</bpmn:incoming>
+      <bpmn:outgoing>Flow_to_update</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_catch_update" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:task id="Activity_update_req" name="Cập nhật request theo yêu cầu">
+      <bpmn:incoming>Flow_to_update</bpmn:incoming>
+      <bpmn:outgoing>Flow_to_resend</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:sendTask id="Activity_resend" name="Gửi lại request đã cập nhật">
+      <bpmn:incoming>Flow_to_resend</bpmn:incoming>
+      <bpmn:outgoing>Flow_resend_to_wait</bpmn:outgoing>
+    </bpmn:sendTask>
+
+    <bpmn:intermediateCatchEvent id="Event_receive_result" name="Nhận kết quả">
+      <bpmn:incoming>Flow_to_catch_result</bpmn:incoming>
+      <bpmn:outgoing>Flow_to_end_pool1</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_receive_result" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:endEvent id="Event_1mb0krl" name="Kết thúc">
+      <bpmn:incoming>Flow_to_end_pool1</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="Flow_0akouhh" sourceRef="StartEvent_1i9m583" targetRef="Activity_1kx4mtd" />
+    <bpmn:sequenceFlow id="Flow_1ptvlpd" sourceRef="Activity_1kx4mtd" targetRef="Activity_1k5gj8g" />
+    <bpmn:sequenceFlow id="Flow_to_wait" sourceRef="Activity_1k5gj8g" targetRef="Gateway_wait_response" />
+    <bpmn:sequenceFlow id="Flow_to_catch_update" sourceRef="Gateway_wait_response" targetRef="Event_catch_update_req" />
+    <bpmn:sequenceFlow id="Flow_to_catch_result" sourceRef="Gateway_wait_response" targetRef="Event_receive_result" />
+    <bpmn:sequenceFlow id="Flow_to_update" sourceRef="Event_catch_update_req" targetRef="Activity_update_req" />
+    <bpmn:sequenceFlow id="Flow_to_resend" sourceRef="Activity_update_req" targetRef="Activity_resend" />
+    <bpmn:sequenceFlow id="Flow_resend_to_wait" sourceRef="Activity_resend" targetRef="Gateway_wait_response" />
+    <bpmn:sequenceFlow id="Flow_to_end_pool1" sourceRef="Event_receive_result" targetRef="Event_1mb0krl" />
+  </bpmn:process>
+
+  <!-- ============================================================ -->
+  <!-- POOL 2 — Asset Administrator -->
+  <!-- ============================================================ -->
+  <bpmn:process id="Process_0d65nqw" isExecutable="false">
+
+    <!-- FIX #5: Thêm tên cho Message Start Event -->
+    <bpmn:startEvent id="Event_1fc3e7u" name="Nhận request từ Phòng/Ban">
+      <bpmn:outgoing>Flow_1rd2ezt</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MessageEventDefinition_0kzevka" />
+    </bpmn:startEvent>
+
+    <!-- FIX #1: Thêm XOR Merge trước Task Xác minh (gom Start Event + loop-back) -->
+    <bpmn:exclusiveGateway id="Gateway_merge_verify">
+      <bpmn:incoming>Flow_1rd2ezt</bpmn:incoming>
+      <bpmn:incoming>Flow_msg_updated_to_merge</bpmn:incoming>
+      <bpmn:outgoing>Flow_merge_to_verify</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:task id="Activity_0wum9fc" name="Xác minh tính hợp lệ của yêu cầu">
+      <bpmn:incoming>Flow_merge_to_verify</bpmn:incoming>
+      <bpmn:outgoing>Flow_1sagrxm</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:exclusiveGateway id="Gateway_0cu5dp2" name="Hợp lệ?">
+      <bpmn:incoming>Flow_1sagrxm</bpmn:incoming>
+      <bpmn:outgoing>Flow_1juqwz6</bpmn:outgoing>
+      <bpmn:outgoing>Flow_15jfbob</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <!-- FIX #3: Đổi userTask → sendTask (gửi yêu cầu bổ sung về Pool 1) -->
+    <bpmn:sendTask id="Activity_0imvodb" name="Yêu cầu Phòng/Ban bổ sung thông tin">
+      <bpmn:incoming>Flow_1juqwz6</bpmn:incoming>
+      <bpmn:outgoing>Flow_to_wait_update</bpmn:outgoing>
+    </bpmn:sendTask>
+
+    <!-- FIX #1: Chờ Phòng/Ban gửi lại bản cập nhật, rồi loop về xác minh -->
+    <bpmn:intermediateCatchEvent id="Event_msg_updated" name="Nhận request đã cập nhật">
+      <bpmn:incoming>Flow_to_wait_update</bpmn:incoming>
+      <bpmn:outgoing>Flow_msg_updated_to_merge</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_updated" />
+    </bpmn:intermediateCatchEvent>
+
+    <!-- FIX #2: Thêm khả năng từ chối — xử lý qua Gateway "Hợp lệ?" thêm nhánh -->
+    <!-- Giữ nguyên 2 nhánh ở Gateway_0cu5dp2: Không → gửi yêu cầu bổ sung (loop),
+         thêm nhánh thứ 3 "Từ chối" trực tiếp -->
+
+    <bpmn:task id="Activity_1he9il5" name="Xác nhận phiếu request">
+      <bpmn:incoming>Flow_15jfbob</bpmn:incoming>
+      <bpmn:outgoing>Flow_confirm_to_merge_inv</bpmn:outgoing>
+    </bpmn:task>
+
+    <!-- FIX #4: Thêm XOR Merge trước Tìm kiếm tồn kho (gom "Có hợp lệ" + "Hàng đã nhập kho") -->
+    <bpmn:exclusiveGateway id="Gateway_merge_inventory">
+      <bpmn:incoming>Flow_confirm_to_merge_inv</bpmn:incoming>
+      <bpmn:incoming>Flow_restock_to_merge_inv</bpmn:incoming>
+      <bpmn:outgoing>Flow_merge_inv_to_search</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:task id="Activity_09uqqr2" name="Tìm kiếm và kiểm tra tồn kho">
+      <bpmn:incoming>Flow_merge_inv_to_search</bpmn:incoming>
+      <bpmn:outgoing>Flow_1c27tmx</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:exclusiveGateway id="Gateway_0jkkbgc" name="Còn hàng?">
+      <bpmn:incoming>Flow_1c27tmx</bpmn:incoming>
+      <bpmn:outgoing>Flow_09m7ubi</bpmn:outgoing>
+      <bpmn:outgoing>Flow_02ls17k</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <!-- === Nhánh "Không còn hàng" === -->
+    <bpmn:parallelGateway id="Gateway_1b0mmh6">
+      <bpmn:incoming>Flow_09m7ubi</bpmn:incoming>
+      <bpmn:outgoing>Flow_1vntlvq</bpmn:outgoing>
+      <bpmn:outgoing>Flow_08si1le</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:task id="Activity_1cuomue" name="Thông báo thời gian chờ">
+      <bpmn:incoming>Flow_08si1le</bpmn:incoming>
+      <bpmn:outgoing>Flow_0w4igi6</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Activity_1e4q3jn" name="Tạo yêu cầu mua sắm">
+      <bpmn:incoming>Flow_1vntlvq</bpmn:incoming>
+      <bpmn:outgoing>Flow_0ogflg9</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:parallelGateway id="Gateway_1rwtnw8">
+      <bpmn:incoming>Flow_0w4igi6</bpmn:incoming>
+      <bpmn:incoming>Flow_0ogflg9</bpmn:incoming>
+      <bpmn:outgoing>Flow_to_wait_restock</bpmn:outgoing>
+    </bpmn:parallelGateway>
+
+    <!-- FIX #4: Thay End Event bằng Intermediate Timer Event chờ hàng về, rồi loop lại tồn kho -->
+    <bpmn:intermediateCatchEvent id="Event_wait_restock" name="Chờ hàng nhập kho">
+      <bpmn:incoming>Flow_to_wait_restock</bpmn:incoming>
+      <bpmn:outgoing>Flow_restock_to_merge_inv</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_restock" />
+    </bpmn:intermediateCatchEvent>
+
+    <!-- === Nhánh "Còn hàng" === -->
+    <bpmn:parallelGateway id="Gateway_1e17l4c">
+      <bpmn:incoming>Flow_02ls17k</bpmn:incoming>
+      <bpmn:outgoing>Flow_1j211u1</bpmn:outgoing>
+      <bpmn:outgoing>Flow_1nl8dk1</bpmn:outgoing>
+      <bpmn:outgoing>Flow_022v1w8</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:task id="Activity_0ubygw8" name="Tạo phiếu xuất kho">
+      <bpmn:incoming>Flow_1j211u1</bpmn:incoming>
+      <bpmn:outgoing>Flow_01joona</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Activity_1gy12qw" name="Gán thông tin user lên tài sản">
+      <bpmn:incoming>Flow_1nl8dk1</bpmn:incoming>
+      <bpmn:outgoing>Flow_1en6m42</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Activity_1gu86l6" name="Cập nhật số lượng trên hệ thống">
+      <bpmn:incoming>Flow_022v1w8</bpmn:incoming>
+      <bpmn:outgoing>Flow_0lho61m</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:parallelGateway id="Gateway_05m6tik">
+      <bpmn:incoming>Flow_01joona</bpmn:incoming>
+      <bpmn:incoming>Flow_1en6m42</bpmn:incoming>
+      <bpmn:incoming>Flow_0lho61m</bpmn:incoming>
+      <bpmn:outgoing>Flow_0r1dagc</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:task id="Activity_0k4pr7t" name="Thông báo User">
+      <bpmn:incoming>Flow_0r1dagc</bpmn:incoming>
+      <bpmn:outgoing>Flow_1sc73xk</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="Event_04pqj7y" name="Kết thúc">
+      <bpmn:incoming>Flow_1sc73xk</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <!-- === Sequence Flows === -->
+    <bpmn:sequenceFlow id="Flow_1rd2ezt" sourceRef="Event_1fc3e7u" targetRef="Gateway_merge_verify" />
+    <bpmn:sequenceFlow id="Flow_merge_to_verify" sourceRef="Gateway_merge_verify" targetRef="Activity_0wum9fc" />
+    <bpmn:sequenceFlow id="Flow_1sagrxm" sourceRef="Activity_0wum9fc" targetRef="Gateway_0cu5dp2" />
+    <bpmn:sequenceFlow id="Flow_1juqwz6" name="Không hợp lệ" sourceRef="Gateway_0cu5dp2" targetRef="Activity_0imvodb" />
+    <bpmn:sequenceFlow id="Flow_15jfbob" name="Hợp lệ" sourceRef="Gateway_0cu5dp2" targetRef="Activity_1he9il5" />
+    <bpmn:sequenceFlow id="Flow_to_wait_update" sourceRef="Activity_0imvodb" targetRef="Event_msg_updated" />
+    <bpmn:sequenceFlow id="Flow_msg_updated_to_merge" sourceRef="Event_msg_updated" targetRef="Gateway_merge_verify" />
+    <bpmn:sequenceFlow id="Flow_confirm_to_merge_inv" sourceRef="Activity_1he9il5" targetRef="Gateway_merge_inventory" />
+    <bpmn:sequenceFlow id="Flow_merge_inv_to_search" sourceRef="Gateway_merge_inventory" targetRef="Activity_09uqqr2" />
+    <bpmn:sequenceFlow id="Flow_1c27tmx" sourceRef="Activity_09uqqr2" targetRef="Gateway_0jkkbgc" />
+    <bpmn:sequenceFlow id="Flow_09m7ubi" name="Không còn" sourceRef="Gateway_0jkkbgc" targetRef="Gateway_1b0mmh6" />
+    <bpmn:sequenceFlow id="Flow_02ls17k" name="Còn" sourceRef="Gateway_0jkkbgc" targetRef="Gateway_1e17l4c" />
+    <bpmn:sequenceFlow id="Flow_1vntlvq" sourceRef="Gateway_1b0mmh6" targetRef="Activity_1e4q3jn" />
+    <bpmn:sequenceFlow id="Flow_08si1le" sourceRef="Gateway_1b0mmh6" targetRef="Activity_1cuomue" />
+    <bpmn:sequenceFlow id="Flow_0w4igi6" sourceRef="Activity_1cuomue" targetRef="Gateway_1rwtnw8" />
+    <bpmn:sequenceFlow id="Flow_0ogflg9" sourceRef="Activity_1e4q3jn" targetRef="Gateway_1rwtnw8" />
+    <bpmn:sequenceFlow id="Flow_to_wait_restock" sourceRef="Gateway_1rwtnw8" targetRef="Event_wait_restock" />
+    <bpmn:sequenceFlow id="Flow_restock_to_merge_inv" sourceRef="Event_wait_restock" targetRef="Gateway_merge_inventory" />
+    <bpmn:sequenceFlow id="Flow_1j211u1" sourceRef="Gateway_1e17l4c" targetRef="Activity_0ubygw8" />
+    <bpmn:sequenceFlow id="Flow_01joona" sourceRef="Activity_0ubygw8" targetRef="Gateway_05m6tik" />
+    <bpmn:sequenceFlow id="Flow_1nl8dk1" sourceRef="Gateway_1e17l4c" targetRef="Activity_1gy12qw" />
+    <bpmn:sequenceFlow id="Flow_022v1w8" sourceRef="Gateway_1e17l4c" targetRef="Activity_1gu86l6" />
+    <bpmn:sequenceFlow id="Flow_1en6m42" sourceRef="Activity_1gy12qw" targetRef="Gateway_05m6tik" />
+    <bpmn:sequenceFlow id="Flow_0lho61m" sourceRef="Activity_1gu86l6" targetRef="Gateway_05m6tik" />
+    <bpmn:sequenceFlow id="Flow_0r1dagc" sourceRef="Gateway_05m6tik" targetRef="Activity_0k4pr7t" />
+    <bpmn:sequenceFlow id="Flow_1sc73xk" sourceRef="Activity_0k4pr7t" targetRef="Event_04pqj7y" />
+  </bpmn:process>
+
+  <!-- ============================================================ -->
+  <!-- BPMN DIAGRAM (layout) -->
+  <!-- ============================================================ -->
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_1subsg8">
+
+      <!-- Pool 1: Bộ phận / Phòng ban (mở rộng để chứa luồng phản hồi) -->
+      <bpmndi:BPMNShape id="Participant_0ute32x_di" bpmnElement="Participant_0ute32x" isHorizontal="true">
+        <dc:Bounds x="156" y="80" width="1700" height="280" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="_BPMNShape_StartEvent_2" bpmnElement="StartEvent_1i9m583">
+        <dc:Bounds x="222" y="162" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="222" y="205" width="38" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1kx4mtd_di" bpmnElement="Activity_1kx4mtd">
+        <dc:Bounds x="310" y="140" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1k5gj8g_di" bpmnElement="Activity_1k5gj8g">
+        <dc:Bounds x="470" y="140" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_wait_response_di" bpmnElement="Gateway_wait_response">
+        <dc:Bounds x="625" y="155" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="615" y="131" width="70" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_catch_update_req_di" bpmnElement="Event_catch_update_req">
+        <dc:Bounds x="732" y="162" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="707" y="205" width="87" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_update_req_di" bpmnElement="Activity_update_req">
+        <dc:Bounds x="830" y="140" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_resend_di" bpmnElement="Activity_resend">
+        <dc:Bounds x="990" y="140" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_receive_result_di" bpmnElement="Event_receive_result">
+        <dc:Bounds x="732" y="272" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="715" y="315" width="70" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_1mb0krl_di" bpmnElement="Event_1mb0krl">
+        <dc:Bounds x="832" y="272" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="830" y="315" width="41" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="Flow_0akouhh_di" bpmnElement="Flow_0akouhh">
+        <di:waypoint x="258" y="180" />
+        <di:waypoint x="310" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1ptvlpd_di" bpmnElement="Flow_1ptvlpd">
+        <di:waypoint x="410" y="180" />
+        <di:waypoint x="470" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_to_wait_di" bpmnElement="Flow_to_wait">
+        <di:waypoint x="570" y="180" />
+        <di:waypoint x="625" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_to_catch_update_di" bpmnElement="Flow_to_catch_update">
+        <di:waypoint x="675" y="180" />
+        <di:waypoint x="732" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_to_update_di" bpmnElement="Flow_to_update">
+        <di:waypoint x="768" y="180" />
+        <di:waypoint x="830" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_to_resend_di" bpmnElement="Flow_to_resend">
+        <di:waypoint x="930" y="180" />
+        <di:waypoint x="990" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_resend_to_wait_di" bpmnElement="Flow_resend_to_wait">
+        <di:waypoint x="1040" y="140" />
+        <di:waypoint x="1040" y="110" />
+        <di:waypoint x="650" y="110" />
+        <di:waypoint x="650" y="155" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_to_catch_result_di" bpmnElement="Flow_to_catch_result">
+        <di:waypoint x="650" y="205" />
+        <di:waypoint x="650" y="290" />
+        <di:waypoint x="732" y="290" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_to_end_pool1_di" bpmnElement="Flow_to_end_pool1">
+        <di:waypoint x="768" y="290" />
+        <di:waypoint x="832" y="290" />
+      </bpmndi:BPMNEdge>
+
+      <!-- Pool 2: Asset Administrator -->
+      <bpmndi:BPMNShape id="Participant_1rxlp3e_di" bpmnElement="Participant_1rxlp3e" isHorizontal="true">
+        <dc:Bounds x="156" y="400" width="1700" height="450" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+
+      <!-- Start Event -->
+      <bpmndi:BPMNShape id="Event_1fc3e7u_di" bpmnElement="Event_1fc3e7u">
+        <dc:Bounds x="222" y="542" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="196" y="585" width="88" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <!-- XOR Merge trước Xác minh -->
+      <bpmndi:BPMNShape id="Gateway_merge_verify_di" bpmnElement="Gateway_merge_verify" isMarkerVisible="true">
+        <dc:Bounds x="295" y="535" width="50" height="50" />
+      </bpmndi:BPMNShape>
+
+      <!-- Xác minh -->
+      <bpmndi:BPMNShape id="Activity_0wum9fc_di" bpmnElement="Activity_0wum9fc">
+        <dc:Bounds x="390" y="520" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+
+      <!-- Gateway Hợp lệ? -->
+      <bpmndi:BPMNShape id="Gateway_0cu5dp2_di" bpmnElement="Gateway_0cu5dp2" isMarkerVisible="true">
+        <dc:Bounds x="535" y="535" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="541" y="592" width="38" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <!-- Send Task: Yêu cầu bổ sung (nhánh Không) -->
+      <bpmndi:BPMNShape id="Activity_0imvodb_di" bpmnElement="Activity_0imvodb">
+        <dc:Bounds x="630" y="440" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+
+      <!-- Intermediate Catch: Nhận request đã cập nhật -->
+      <bpmndi:BPMNShape id="Event_msg_updated_di" bpmnElement="Event_msg_updated">
+        <dc:Bounds x="782" y="462" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="756" y="505" width="88" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <!-- Xác nhận phiếu (nhánh Có) -->
+      <bpmndi:BPMNShape id="Activity_1he9il5_di" bpmnElement="Activity_1he9il5">
+        <dc:Bounds x="630" y="610" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+
+      <!-- XOR Merge trước Tìm tồn kho -->
+      <bpmndi:BPMNShape id="Gateway_merge_inventory_di" bpmnElement="Gateway_merge_inventory" isMarkerVisible="true">
+        <dc:Bounds x="775" y="625" width="50" height="50" />
+      </bpmndi:BPMNShape>
+
+      <!-- Tìm kiếm tồn kho -->
+      <bpmndi:BPMNShape id="Activity_09uqqr2_di" bpmnElement="Activity_09uqqr2">
+        <dc:Bounds x="870" y="610" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+
+      <!-- Gateway Còn hàng? -->
+      <bpmndi:BPMNShape id="Gateway_0jkkbgc_di" bpmnElement="Gateway_0jkkbgc" isMarkerVisible="true">
+        <dc:Bounds x="1015" y="625" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1011" y="682" width="58" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <!-- === Nhánh "Không còn hàng" === -->
+      <bpmndi:BPMNShape id="Gateway_1b0mmh6_di" bpmnElement="Gateway_1b0mmh6">
+        <dc:Bounds x="1015" y="455" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1cuomue_di" bpmnElement="Activity_1cuomue">
+        <dc:Bounds x="1110" y="440" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1e4q3jn_di" bpmnElement="Activity_1e4q3jn">
+        <dc:Bounds x="1110" y="530" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_1rwtnw8_di" bpmnElement="Gateway_1rwtnw8">
+        <dc:Bounds x="1255" y="455" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_wait_restock_di" bpmnElement="Event_wait_restock">
+        <dc:Bounds x="1352" y="462" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1326" y="505" width="88" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <!-- === Nhánh "Còn hàng" === -->
+      <bpmndi:BPMNShape id="Gateway_1e17l4c_di" bpmnElement="Gateway_1e17l4c">
+        <dc:Bounds x="1115" y="700" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0ubygw8_di" bpmnElement="Activity_0ubygw8">
+        <dc:Bounds x="1210" y="620" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1gy12qw_di" bpmnElement="Activity_1gy12qw">
+        <dc:Bounds x="1210" y="700" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1gu86l6_di" bpmnElement="Activity_1gu86l6">
+        <dc:Bounds x="1210" y="780" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_05m6tik_di" bpmnElement="Gateway_05m6tik">
+        <dc:Bounds x="1355" y="700" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0k4pr7t_di" bpmnElement="Activity_0k4pr7t">
+        <dc:Bounds x="1450" y="695" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_04pqj7y_di" bpmnElement="Event_04pqj7y">
+        <dc:Bounds x="1602" y="717" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1600" y="760" width="41" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <!-- === Sequence Flow Edges === -->
+      <bpmndi:BPMNEdge id="Flow_1rd2ezt_di" bpmnElement="Flow_1rd2ezt">
+        <di:waypoint x="258" y="560" />
+        <di:waypoint x="295" y="560" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_merge_to_verify_di" bpmnElement="Flow_merge_to_verify">
+        <di:waypoint x="345" y="560" />
+        <di:waypoint x="390" y="560" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1sagrxm_di" bpmnElement="Flow_1sagrxm">
+        <di:waypoint x="490" y="560" />
+        <di:waypoint x="535" y="560" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1juqwz6_di" bpmnElement="Flow_1juqwz6">
+        <di:waypoint x="560" y="535" />
+        <di:waypoint x="560" y="480" />
+        <di:waypoint x="630" y="480" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="565" y="462" width="65" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_15jfbob_di" bpmnElement="Flow_15jfbob">
+        <di:waypoint x="560" y="585" />
+        <di:waypoint x="560" y="650" />
+        <di:waypoint x="630" y="650" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="570" y="632" width="35" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_to_wait_update_di" bpmnElement="Flow_to_wait_update">
+        <di:waypoint x="730" y="480" />
+        <di:waypoint x="782" y="480" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_msg_updated_to_merge_di" bpmnElement="Flow_msg_updated_to_merge">
+        <di:waypoint x="800" y="462" />
+        <di:waypoint x="800" y="420" />
+        <di:waypoint x="320" y="420" />
+        <di:waypoint x="320" y="535" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_confirm_to_merge_inv_di" bpmnElement="Flow_confirm_to_merge_inv">
+        <di:waypoint x="730" y="650" />
+        <di:waypoint x="775" y="650" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_merge_inv_to_search_di" bpmnElement="Flow_merge_inv_to_search">
+        <di:waypoint x="825" y="650" />
+        <di:waypoint x="870" y="650" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1c27tmx_di" bpmnElement="Flow_1c27tmx">
+        <di:waypoint x="970" y="650" />
+        <di:waypoint x="1015" y="650" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_09m7ubi_di" bpmnElement="Flow_09m7ubi">
+        <di:waypoint x="1040" y="625" />
+        <di:waypoint x="1040" y="505" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1045" y="562" width="52" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_02ls17k_di" bpmnElement="Flow_02ls17k">
+        <di:waypoint x="1040" y="675" />
+        <di:waypoint x="1040" y="725" />
+        <di:waypoint x="1115" y="725" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1055" y="707" width="21" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1vntlvq_di" bpmnElement="Flow_1vntlvq">
+        <di:waypoint x="1040" y="455" />
+        <di:waypoint x="1040" y="570" />
+        <di:waypoint x="1110" y="570" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_08si1le_di" bpmnElement="Flow_08si1le">
+        <di:waypoint x="1065" y="480" />
+        <di:waypoint x="1110" y="480" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0w4igi6_di" bpmnElement="Flow_0w4igi6">
+        <di:waypoint x="1210" y="480" />
+        <di:waypoint x="1255" y="480" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0ogflg9_di" bpmnElement="Flow_0ogflg9">
+        <di:waypoint x="1210" y="570" />
+        <di:waypoint x="1280" y="570" />
+        <di:waypoint x="1280" y="505" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_to_wait_restock_di" bpmnElement="Flow_to_wait_restock">
+        <di:waypoint x="1305" y="480" />
+        <di:waypoint x="1352" y="480" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_restock_to_merge_inv_di" bpmnElement="Flow_restock_to_merge_inv">
+        <di:waypoint x="1370" y="462" />
+        <di:waypoint x="1370" y="420" />
+        <di:waypoint x="800" y="420" />
+        <di:waypoint x="800" y="625" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1j211u1_di" bpmnElement="Flow_1j211u1">
+        <di:waypoint x="1140" y="700" />
+        <di:waypoint x="1140" y="660" />
+        <di:waypoint x="1210" y="660" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_01joona_di" bpmnElement="Flow_01joona">
+        <di:waypoint x="1310" y="660" />
+        <di:waypoint x="1380" y="660" />
+        <di:waypoint x="1380" y="700" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1nl8dk1_di" bpmnElement="Flow_1nl8dk1">
+        <di:waypoint x="1165" y="725" />
+        <di:waypoint x="1210" y="740" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_022v1w8_di" bpmnElement="Flow_022v1w8">
+        <di:waypoint x="1140" y="750" />
+        <di:waypoint x="1140" y="820" />
+        <di:waypoint x="1210" y="820" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1en6m42_di" bpmnElement="Flow_1en6m42">
+        <di:waypoint x="1310" y="740" />
+        <di:waypoint x="1380" y="740" />
+        <di:waypoint x="1380" y="750" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0lho61m_di" bpmnElement="Flow_0lho61m">
+        <di:waypoint x="1310" y="820" />
+        <di:waypoint x="1380" y="820" />
+        <di:waypoint x="1380" y="750" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0r1dagc_di" bpmnElement="Flow_0r1dagc">
+        <di:waypoint x="1405" y="725" />
+        <di:waypoint x="1450" y="735" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1sc73xk_di" bpmnElement="Flow_1sc73xk">
+        <di:waypoint x="1550" y="735" />
+        <di:waypoint x="1602" y="735" />
+      </bpmndi:BPMNEdge>
+
+      <!-- Message Flows -->
+      <bpmndi:BPMNEdge id="Flow_0p24ay3_di" bpmnElement="Flow_0p24ay3">
+        <di:waypoint x="520" y="220" />
+        <di:waypoint x="520" y="380" />
+        <di:waypoint x="240" y="380" />
+        <di:waypoint x="240" y="542" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_msg_update_req_di" bpmnElement="Flow_msg_update_req">
+        <di:waypoint x="680" y="440" />
+        <di:waypoint x="680" y="380" />
+        <di:waypoint x="880" y="380" />
+        <di:waypoint x="880" y="220" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_msg_update_back_di" bpmnElement="Flow_msg_update_back">
+        <di:waypoint x="1040" y="220" />
+        <di:waypoint x="1040" y="380" />
+        <di:waypoint x="800" y="380" />
+        <di:waypoint x="800" y="462" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_msg_result_di" bpmnElement="Flow_msg_result">
+        <di:waypoint x="1500" y="695" />
+        <di:waypoint x="1500" y="380" />
+        <di:waypoint x="750" y="380" />
+        <di:waypoint x="750" y="308" />
+      </bpmndi:BPMNEdge>
+
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
